@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  KnowledgeBaseId:
+    Type: String
+  DataSourceId:
+    Type: String
+
+Resources:
+  ConversationMemoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: rag-conversation-memory
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+
+  AdvancedOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: RAGAdvancedOrchestrator
+      Handler: advanced_orchestrator.lambda_handler
+      Runtime: python3.10
+      CodeUri: lambda/
+      Timeout: 300
+      MemorySize: 1024
+      Environment:
+        Variables:
+          KNOWLEDGE_BASE_ID: !Ref KnowledgeBaseId
+          DATA_SOURCE_ID: !Ref DataSourceId
+          MEMORY_TABLE: !Ref ConversationMemoryTable
+      Policies:
+        - Statement:
+          - Effect: Allow
+            Action:
+              - bedrock:InvokeModel
+              - bedrock-agent:Retrieve
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+            Resource: !GetAtt ConversationMemoryTable.Arn
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            Path: /rag
+            Method: post
+
+Outputs:
+  ApiUrl:
+    Description: Advanced multi-agent API endpoint
+    Value: !Sub 'https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/rag'
+  
+  MemoryTableName:
+    Description: DynamoDB table for conversation memory
+    Value: !Ref ConversationMemoryTable
